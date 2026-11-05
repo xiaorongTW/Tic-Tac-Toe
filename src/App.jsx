@@ -1,33 +1,61 @@
 import { useEffect, useState } from 'react';
 
+// 0. Constants
 // How often the running timer refreshes the screen.
 const TICK_MS = 100;
 
+// Every row, column, and diagonal that wins the game.
+const WIN_LINES = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6],
+];
+
+// Square indexes grouped into the three rows of the board.
+const BOARD_ROWS = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+];
+
+// 0. Utils
+const formatTime = (ms) => (ms / 1000).toFixed(1) + 's';
+
+const calculateWinner = (squares) => {
+  for (const [a, b, c] of WIN_LINES) {
+    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+      return squares[a];
+    }
+  }
+  return null;
+};
+
 // A single square on the board. It is a "controlled" component:
 // it receives its value and click handler from the Board via props.
-function Square({ value, onSquareClick, disabled }) {
+const Square = (props) => {
+  // 1. Props
+  const { value, onSquareClick, disabled } = props;
+
+  // (main)
   return (
     <button className="square" onClick={onSquareClick} disabled={disabled}>
       {value}
     </button>
   );
-}
+};
 
 // The 3x3 board. It holds no state of its own — the Game passes in the
 // current squares, whose turn it is, and a callback to report a move.
-function Board({ xIsNext, squares, onPlay, isPaused }) {
-  function handleClick(i) {
-    // Ignore clicks while paused, on filled squares, or after the game is won.
-    if (isPaused || calculateWinner(squares) || squares[i]) {
-      return;
-    }
-    // Immutability: copy the array instead of mutating it, so the
-    // previous board stays intact in history (enables time travel).
-    const nextSquares = squares.slice();
-    nextSquares[i] = xIsNext ? 'X' : 'O';
-    onPlay(nextSquares);
-  }
+const Board = (props) => {
+  // 1. Props
+  const { xIsNext, squares, onPlay, isPaused } = props;
 
+  // 6. Logic and Utils
   const winner = calculateWinner(squares);
   let status;
   if (winner) {
@@ -40,40 +68,52 @@ function Board({ xIsNext, squares, onPlay, isPaused }) {
     status = 'Next player: ' + (xIsNext ? 'X' : 'O');
   }
 
+  // 7. Event Handlers
+  const handleSquareClick = (i) => {
+    // Ignore clicks while paused, on filled squares, or after the game is won.
+    if (isPaused || winner || squares[i]) {
+      return;
+    }
+    // Immutability: copy the array instead of mutating it, so the
+    // previous board stays intact in history (enables time travel).
+    const nextSquares = squares.slice();
+    nextSquares[i] = xIsNext ? 'X' : 'O';
+    onPlay(nextSquares);
+  };
+
+  // 8. Render Functions
+  const renderSquare = (i) => (
+    <Square
+      key={i}
+      value={squares[i]}
+      onSquareClick={() => handleSquareClick(i)}
+      disabled={isPaused}
+    />
+  );
+
+  const renderRows = () =>
+    BOARD_ROWS.map((row, rowIndex) => (
+      <div key={rowIndex} className="board-row">
+        {row.map(renderSquare)}
+      </div>
+    ));
+
+  // (main)
   return (
     <>
       <div className="status">{status}</div>
-      <div className="board-row">
-        <Square value={squares[0]} onSquareClick={() => handleClick(0)} disabled={isPaused} />
-        <Square value={squares[1]} onSquareClick={() => handleClick(1)} disabled={isPaused} />
-        <Square value={squares[2]} onSquareClick={() => handleClick(2)} disabled={isPaused} />
-      </div>
-      <div className="board-row">
-        <Square value={squares[3]} onSquareClick={() => handleClick(3)} disabled={isPaused} />
-        <Square value={squares[4]} onSquareClick={() => handleClick(4)} disabled={isPaused} />
-        <Square value={squares[5]} onSquareClick={() => handleClick(5)} disabled={isPaused} />
-      </div>
-      <div className="board-row">
-        <Square value={squares[6]} onSquareClick={() => handleClick(6)} disabled={isPaused} />
-        <Square value={squares[7]} onSquareClick={() => handleClick(7)} disabled={isPaused} />
-        <Square value={squares[8]} onSquareClick={() => handleClick(8)} disabled={isPaused} />
-      </div>
+      {renderRows()}
     </>
   );
-}
-
-// Top-level component. Pressing "Reset game" gives <Game> a new key, so
-// React throws away the old Game and mounts a fresh one — every piece of
-// state (history, timers, running flag) starts over without any code that
-// resets each value one by one.
-export default function App() {
-  const [gameId, setGameId] = useState(0);
-  return <Game key={gameId} onReset={() => setGameId(gameId + 1)} />;
-}
+};
 
 // State is "lifted up" here so the Game owns the full move history and can
 // jump back to any past move.
-function Game({ onReset }) {
+const Game = (props) => {
+  // 1. Props
+  const { onReset } = props;
+
+  // 3. State
   const [history, setHistory] = useState([Array(9).fill(null)]);
   const [currentMove, setCurrentMove] = useState(0);
   // roundTimes[move] = ms the player spent before making that move.
@@ -83,8 +123,9 @@ function Game({ onReset }) {
   const [currentRoundMs, setCurrentRoundMs] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Derived values — computed during render instead of being stored in
-  // state and kept in sync with an Effect.
+  // 6. Logic and Utils (declared before the Effect because it depends on
+  // `isTicking`). Derived values are computed during render instead of
+  // being stored in state and kept in sync with an Effect.
   const xIsNext = currentMove % 2 === 0;
   const currentSquares = history[currentMove];
   const isGameOver =
@@ -94,6 +135,16 @@ function Game({ onReset }) {
     roundTimes.slice(1, currentMove + 1).reduce((sum, ms) => sum + ms, 0) +
     (isGameOver ? 0 : currentRoundMs);
 
+  let startPauseLabel;
+  if (isRunning) {
+    startPauseLabel = 'Pause';
+  } else if (currentMove === 0 && currentRoundMs === 0) {
+    startPauseLabel = 'Start';
+  } else {
+    startPauseLabel = 'Resume';
+  }
+
+  // 5. useEffect
   // The ONLY Effect: keep a browser interval (an external system) in sync
   // with whether the clock should be ticking. The cleanup clears the
   // interval on pause, game over, reset (unmount), and the extra
@@ -115,7 +166,8 @@ function Game({ onReset }) {
     return () => clearInterval(id);
   }, [isTicking]);
 
-  function handlePlay(nextSquares) {
+  // 7. Event Handlers
+  const handlePlay = (nextSquares) => {
     // If we went back in time, discard the "future" moves before adding.
     const nextHistory = [...history.slice(0, currentMove + 1), nextSquares];
     setHistory(nextHistory);
@@ -124,39 +176,47 @@ function Game({ onReset }) {
     // here in the event handler, not in an Effect that watches `history`.
     setRoundTimes([...roundTimes.slice(0, currentMove + 1), currentRoundMs]);
     setCurrentRoundMs(0);
-  }
+  };
 
-  function jumpTo(nextMove) {
+  const handleJumpTo = (nextMove) => {
     setCurrentMove(nextMove);
     // A new round starts from the board we jumped to.
     setCurrentRoundMs(0);
-  }
+  };
 
-  function toggleRunning() {
+  const handleToggleRunning = () => {
     setIsRunning(!isRunning);
-  }
+  };
 
-  let startPauseLabel;
-  if (isRunning) {
-    startPauseLabel = 'Pause';
-  } else if (currentMove === 0 && currentRoundMs === 0) {
-    startPauseLabel = 'Start';
-  } else {
-    startPauseLabel = 'Resume';
-  }
+  // 8. Render Functions
+  const renderControls = () => (
+    <div className="controls">
+      <button onClick={handleToggleRunning} disabled={isGameOver}>
+        {startPauseLabel}
+      </button>
+      <button onClick={onReset}>Reset game</button>
+    </div>
+  );
 
-  const moves = history.map((squares, move) => {
-    let description;
-    if (move > 0) {
-      description = 'Go to move #' + move;
-    } else {
-      description = 'Go to game start';
-    }
-    // The move index is a stable key: moves are never reordered,
-    // inserted, or deleted from the middle.
-    return (
+  const renderTimer = () => (
+    <div className="timer">
+      {!isGameOver && (
+        <div>
+          Round {currentMove + 1}: {formatTime(currentRoundMs)}
+        </div>
+      )}
+      <div>Total: {formatTime(totalMs)}</div>
+    </div>
+  );
+
+  // The move index is a stable key: moves are never reordered,
+  // inserted, or deleted from the middle.
+  const renderMoves = () =>
+    history.map((_squares, move) => (
       <li key={move}>
-        <button onClick={() => jumpTo(move)}>{description}</button>
+        <button onClick={() => handleJumpTo(move)}>
+          {move > 0 ? 'Go to move #' + move : 'Go to game start'}
+        </button>
         {move > 0 && (
           <span className="round-time">
             {' '}
@@ -165,26 +225,14 @@ function Game({ onReset }) {
           </span>
         )}
       </li>
-    );
-  });
+    ));
 
+  // (main)
   return (
     <div className="game">
       <div className="game-board">
-        <div className="controls">
-          <button onClick={toggleRunning} disabled={isGameOver}>
-            {startPauseLabel}
-          </button>
-          <button onClick={onReset}>Reset game</button>
-        </div>
-        <div className="timer">
-          {!isGameOver && (
-            <div>
-              Round {currentMove + 1}: {formatTime(currentRoundMs)}
-            </div>
-          )}
-          <div>Total: {formatTime(totalMs)}</div>
-        </div>
+        {renderControls()}
+        {renderTimer()}
         <Board
           xIsNext={xIsNext}
           squares={currentSquares}
@@ -193,32 +241,27 @@ function Game({ onReset }) {
         />
       </div>
       <div className="game-info">
-        <ol>{moves}</ol>
+        <ol>{renderMoves()}</ol>
       </div>
     </div>
   );
-}
+};
 
-function formatTime(ms) {
-  return (ms / 1000).toFixed(1) + 's';
-}
+// Top-level component. Pressing "Reset game" gives <Game> a new key, so
+// React throws away the old Game and mounts a fresh one — every piece of
+// state (history, timers, running flag) starts over without any code that
+// resets each value one by one.
+const App = () => {
+  // 3. State
+  const [gameId, setGameId] = useState(0);
 
-function calculateWinner(squares) {
-  const lines = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8],
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8],
-    [0, 4, 8],
-    [2, 4, 6],
-  ];
-  for (let i = 0; i < lines.length; i++) {
-    const [a, b, c] = lines[i];
-    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-      return squares[a];
-    }
-  }
-  return null;
-}
+  // 7. Event Handlers
+  const handleReset = () => {
+    setGameId(gameId + 1);
+  };
+
+  // (main)
+  return <Game key={gameId} onReset={handleReset} />;
+};
+
+export default App;
