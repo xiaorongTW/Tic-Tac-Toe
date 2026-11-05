@@ -41,3 +41,24 @@ body {
 .game-info {
   margin-left: 20px;
 }
+
+.controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 10px;
+}
+
+.round-time {
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keep X/O fully visible while the board is disabled (paused). */
+.square:disabled {
+  color: inherit;
+}
